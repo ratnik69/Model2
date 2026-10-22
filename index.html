@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Network Terminal — 3D Holographic Command Center</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #02050a;
+            font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #e2f1ff;
+            user-select: none;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        #webgl-container {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+        }
+
+        /* Декоративная научно-фантастическая виньетка экрана */
+        .hud-vignette {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+            background:
+                radial-gradient(circle at 50% 50%, transparent 58%, rgba(1, 6, 15, 0.78) 100%),
+                linear-gradient(180deg, rgba(0, 210, 255, 0.03) 0%, transparent 12%, transparent 88%, rgba(0, 210, 255, 0.04) 100%);
+        }
+
+        /* Круглая кнопка скрытия/показа панели в правом верхнем углу */
+        #ui-toggle-btn {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: rgba(8, 18, 34, 0.62);
+            backdrop-filter: blur(22px) saturate(180%);
+            -webkit-backdrop-filter: blur(22px) saturate(180%);
+            border: 1px solid rgba(0, 210, 255, 0.45);
+            box-shadow:
+                0 8px 24px rgba(0, 0, 0, 0.65),
+                0 0 16px rgba(0, 210, 255, 0.22),
+                inset 0 1px 0 rgba(255, 255, 255, 0.18);
+            color: #00f0ff;
+            font-size: 20px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 20;
+            transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, color 0.25s ease, transform 0.2s ease;
+        }
+
+        #ui-toggle-btn:hover {
+            background: rgba(0, 180, 255, 0.25);
+            border-color: #00f0ff;
+            box-shadow: 0 0 22px rgba(0, 240, 255, 0.55);
+            color: #ffffff;
+            transform: scale(1.05);
+        }
+
+        #ui-toggle-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Панель управления в стиле Sci-Fi Glassmorphism */
+        .terminal-panel {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            width: 340px;
+            max-width: calc(100vw - 48px);
+            padding: 22px 24px;
+            border-radius: 20px;
+            background: rgba(8, 18, 34, 0.62);
+            backdrop-filter: blur(22px) saturate(180%);
+            -webkit-backdrop-filter: blur(22px) saturate(180%);
+            border: 1px solid rgba(0, 210, 255, 0.24);
+            box-shadow:
+                0 24px 60px rgba(0, 0, 0, 0.75),
+                0 0 25px rgba(0, 195, 255, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.16);
+            z-index: 10;
+            transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.35s ease;
+        }
+
+        /* Состояние скрытой панели */
+        .terminal-panel.hidden {
+            transform: translateX(-120%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Адаптация под экраны смартфонов */
+        @media (max-width: 400px) {
+            .terminal-panel {
+                top: 16px;
+                left: 12px;
+                width: calc(100vw - 24px);
+                max-width: calc(100vw - 24px);
+                padding: 18px 16px;
+            }
+
+            #ui-toggle-btn {
+                top: 16px;
+                right: 12px;
+                width: 42px;
+                height: 42px;
+                font-size: 18px;
+            }
+        }
+
+        .terminal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .terminal-title {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #ffffff 0%, #6be5ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            padding: 3px 9px;
+            border-radius: 999px;
+            background: rgba(0, 240, 255, 0.12);
+            color: #00f0ff;
+            border: 1px solid rgba(0, 240, 255, 0.35);
+        }
+
+        .live-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #00f0ff;
+            box-shadow: 0 0 8px #00f0ff;
+            animation: pulseDot 1.8s infinite ease-in-out;
+        }
+
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        .terminal-subtitle {
+            font-size: 12px;
+            color: rgba(168, 208, 240, 0.68);
+            margin-bottom: 16px;
+            line-height: 1.45;
+        }
+
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, rgba(0, 210, 255, 0.35), rgba(0, 210, 255, 0.04));
+            margin: 14px 0;
+        }
+
+        /* Строки с тумблерами */
+        .toggle-list {
+            display: flex;
+            flex-direction: column;
+            gap: 11px;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13.5px;
+            font-weight: 500;
+            color: rgba(230, 244, 255, 0.9);
+            cursor: pointer;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider-toggle {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background-color: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 24px;
+            transition: 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .slider-toggle:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            bottom: 2px;
+            background-color: #ffffff;
+            border-radius: 50%;
+            transition: 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+        }
+
+        .switch input:checked + .slider-toggle {
+            background-color: rgba(0, 200, 255, 0.35);
+            border-color: #00e1ff;
+            box-shadow: 0 0 12px rgba(0, 225, 255, 0.35);
+        }
+
+        .switch input:checked + .slider-toggle:before {
+            transform: translateX(20px);
+            background-color: #00f0ff;
+            box-shadow: 0 0 10px #00f0ff;
+        }
+
+        /* Слайдер скорости вращения */
+        .range-group {
+            margin-top: 4px;
+        }
+
+        .range-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12.5px;
+            color: rgba(190, 225, 255, 0.85);
+            margin-bottom: 8px;
+        }
+
+        .range-header b {
+            color: #00f0ff;
+            font-variant-numeric: tabular-nums;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 5px;
+            border-radius: 5px;
+            background: rgba(0, 210, 255, 0.2);
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #00f0ff;
+            box-shadow: 0 0 12px #00f0ff;
+            cursor: pointer;
+            border: 2px solid #ffffff;
+        }
+
+        /* Кнопка сброса камеры */
+        .reset-btn {
+            margin-top: 16px;
+            width: 100%;
+            padding: 11px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 225, 255, 0.4);
+            background: linear-gradient(135deg, rgba(0, 180, 255, 0.22) 0%, rgba(0, 95, 180, 0.32) 100%);
+            color: #e8f7ff;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 6px 18px rgba(0, 140, 255, 0.18);
+        }
+
+        .reset-btn:hover {
+            background: linear-gradient(135deg, rgba(0, 210, 255, 0.38) 0%, rgba(0, 120, 215, 0.48) 100%);
+            border-color: #00f0ff;
+            box-shadow: 0 0 20px rgba(0, 225, 255, 0.38);
+            transform: translateY(-1px);
+        }
+
+        .reset-btn:active {
+            transform: translateY(1px);
+        }
+
+        .telemetry-footer {
+            margin-top: 14px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: rgba(140, 190, 230, 0.6);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        /* Стили HTML-меток городов (CSS2DRenderer) */
+        .city-label {
+            pointer-events: auto;
+            cursor: pointer;
+            padding: 5px 11px;
+            border-radius: 8px;
+            background: rgba(6, 18, 34, 0.78);
+            border: 1px solid rgba(0, 230, 255, 0.55);
+            box-shadow: 0 0 15px rgba(0, 215, 255, 0.25), inset 0 0 8px rgba(0, 215, 255, 0.12);
+            color: #e8f8ff;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            transform: translateY(-18px);
+            transition: opacity 0.25s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+            backdrop-filter: blur(6px);
+        }
+
+        .city-label:hover {
+            background: rgba(0, 65, 110, 0.9);
+            border-color: #ffffff;
+            box-shadow: 0 0 22px rgba(0, 240, 255, 0.75);
+        }
+
+        .city-label.hub {
+            border-color: rgba(255, 185, 50, 0.85);
+            box-shadow: 0 0 18px rgba(255, 170, 0, 0.35), inset 0 0 10px rgba(255, 170, 0, 0.15);
+        }
+
+        .city-label.hub:hover {
+            border-color: #fff3d1;
+            box-shadow: 0 0 26px rgba(255, 195, 50, 0.85);
+        }
+
+        .city-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #00f0ff;
+            box-shadow: 0 0 8px #00f0ff;
+        }
+
+        .city-label.hub .city-dot {
+            background: #ffb72b;
+            box-shadow: 0 0 10px #ffb72b;
+        }
+
+        .city-coords {
+            font-size: 9.5px;
+            font-weight: 400;
+            color: rgba(155, 215, 255, 0.75);
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        }
+    </style>
+
+    <!-- Подключение Three.js и аддонов через CDN с importmap -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div class="hud-vignette"></div>
+
+    <!-- Кнопка скрытия/показа интерфейса в правом верхнем углу -->
+    <button id="ui-toggle-btn" aria-label="Скрыть или показать панель управления" title="Панель управления">✕</button>
+
+    <!-- Левая верхняя панель управления (Glassmorphism) -->
+    <aside class="terminal-panel">
+        <div class="terminal-header">
+            <h1 class="terminal-title">Global Network Terminal</h1>
+            <div class="live-indicator">
+                <span class="live-dot"></span>
+                <span>ONLINE</span>
+            </div>
+        </div>
+        <p class="terminal-subtitle">
+            Голографический центр мониторинга глобального трафика. Нажмите на метку любого города для наведения камеры.
+        </p>
+
+        <div class="divider"></div>
+
+        <div class="toggle-list">
+            <label class="toggle-row">
+                <span>Облака</span>
+                <span class="switch">
+                    <input type="checkbox" id="toggle-clouds" checked>
+                    <span class="slider-toggle"></span>
+                </span>
+            </label>
+
+            <label class="toggle-row">
+                <span>Атмосфера</span>
+                <span class="switch">
+                    <input type="checkbox" id="toggle-atmosphere" checked>
+                    <span class="slider-toggle"></span>
+                </span>
+            </label>
+
+            <label class="toggle-row">
+                <span>Линии связи</span>
+                <span class="switch">
+                    <input type="checkbox" id="toggle-links" checked>
+                    <span class="slider-toggle"></span>
+                </span>
+            </label>
+
+            <label class="toggle-row">
+                <span>Голографическая сетка</span>
+                <span class="switch">
+                    <input type="checkbox" id="toggle-grid" checked>
+                    <span class="slider-toggle"></span>
+                </span>
+            </label>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="range-group">
+            <div class="range-header">
+                <span>Скорость вращения Земли</span>
+                <b id="rot-speed-label">1.0x</b>
+            </div>
+            <input type="range" id="rot-speed-slider" min="0" max="3" step="0.1" value="1.0">
+        </div>
+
+        <button class="reset-btn" id="reset-cam-btn">Сброс камеры</button>
+
+        <div class="telemetry-footer">
+            <span>УЗЛЫ: 5 АКТИВНЫХ</span>
+            <span id="focus-status">ФОКУС: ОРБИТА</span>
+        </div>
+    </aside>
+
+    <div id="webgl-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        // ==========================================
+        // 1. БАЗОВАЯ ИНИЦИАЛИЗАЦИЯ СЦЕНЫ И РЕНДЕРЕРОВ
+        // ==========================================
+        const container = document.getElementById('webgl-container');
+        const scene = new THREE.Scene();
+
+        const EARTH_RADIUS = 10;
+        const DEFAULT_CAM_POS = new THREE.Vector3(16, 12, 23);
+
+        const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.copy(DEFAULT_CAM_POS);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        container.appendChild(renderer.domElement);
+
+        // CSS2DRenderer для стилизованных HTML-подписей городов поверх 3D-сцены
+        const labelRenderer = new CSS2DRenderer();
+        labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        labelRenderer.domElement.style.position = 'absolute';
+        labelRenderer.domElement.style.top = '0px';
+        labelRenderer.domElement.style.left = '0px';
+        labelRenderer.domElement.style.pointerEvents = 'none';
+        labelRenderer.domElement.style.zIndex = '5';
+        container.appendChild(labelRenderer.domElement);
+
+        // Настройка OrbitControls с демпфированием и ограничением дистанции
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.055;
+        controls.rotateSpeed = 0.75;
+        controls.zoomSpeed = 0.9;
+        controls.enablePan = false;
+        controls.minDistance = EARTH_RADIUS * 1.32; // Защита от проваливания сквозь планету
+        controls.maxDistance = EARTH_RADIUS * 6.5;
+
+        // Пост-обработка: EffectComposer + UnrealBloomPass (сила ~1.5, порог ~0.4, радиус ~0.8)
+        const renderScene = new RenderPass(scene, camera);
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            1.5, // strength
+            0.8, // radius
+            0.4  // threshold
+        );
+
+        const composer = new EffectComposer(renderer);
+        composer.addPass(renderScene);
+        composer.addPass(bloomPass);
+
+        // Направление солнечного света (освещает Европу/Азию с эффектным терминатором)
+        const sunDirection = new THREE.Vector3(1.8, 0.55, 1.3).normalize();
+
+        // Главная вращающаяся группа планеты (объединяет Землю, пины и дуги связи)
+        const globeGroup = new THREE.Group();
+        // Начальный поворот, чтобы Москва и Европа сразу были удобно развернуты к камере
+        globeGroup.rotation.y = -1.75;
+        scene.add(globeGroup);
+
+        // ==========================================
+        // 2. ЗВЕЗДНЫЙ ФОН С ШЕЙДЕРОМ МЕРЦАНИЯ
+        // ==========================================
+        function createStarfield() {
+            const count = 7500;
+            const geo = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
+            const sizes = new Float32Array(count);
+            const phases = new Float32Array(count);
+
+            const starPalette = [
+                new THREE.Color(0x9bbcff),
+                new THREE.Color(0xdbe9ff),
+                new THREE.Color(0xffffff),
+                new THREE.Color(0xffe9c4),
+                new THREE.Color(0x7ce8ff)
+            ];
+
+            for (let i = 0; i < count; i++) {
+                const r = 180 + Math.random() * 450;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+
+                positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = r * Math.cos(phi);
+
+                const col = starPalette[Math.floor(Math.random() * starPalette.length)];
+                colors[i * 3]     = col.r;
+                colors[i * 3 + 1] = col.g;
+                colors[i * 3 + 2] = col.b;
+
+                sizes[i] = 0.9 + Math.pow(Math.random(), 3) * 3.2;
+                phases[i] = Math.random() * Math.PI * 2;
+            }
+
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+            geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+
+            const mat = new THREE.ShaderMaterial({
+                uniforms: {
+                    uTime: { value: 0 },
+                    uPixelRatio: { value: renderer.getPixelRatio() }
+                },
+                vertexShader: `
+                    attribute float aSize;
+                    attribute float aPhase;
+                    varying vec3 vColor;
+                    varying float vAlpha;
+                    uniform float uTime;
+                    uniform float uPixelRatio;
+
+                    void main() {
+                        vColor = color;
+                        vAlpha = 0.45 + 0.55 * sin(uTime * 2.4 + aPhase);
+                        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+                        gl_PointSize = aSize * uPixelRatio * (0.7 + 0.3 * vAlpha) * (260.0 / -mvPos.z);
+                        gl_Position = projectionMatrix * mvPos;
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vColor;
+                    varying float vAlpha;
+
+                    void main() {
+                        float d = length(gl_PointCoord - vec2(0.5));
+                        if (d > 0.5) discard;
+                        float glow = smoothstep(0.5, 0.05, d);
+                        gl_FragColor = vec4(vColor * 0.42, glow * vAlpha);
+                    }
+                `,
+                transparent: true,
+                vertexColors: true,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+
+            const points = new THREE.Points(geo, mat);
+            scene.add(points);
+            return mat;
+        }
+
+        const starMaterial = createStarfield();
+
+        // ==========================================
+        // 3. ЗАГРУЗКА ТЕКСТУР ЗЕМЛИ С ОФИЦИАЛЬНОГО CDN THREE.JS
+        // ==========================================
+        const textureLoader = new THREE.TextureLoader();
+        textureLoader.setCrossOrigin('anonymous');
+
+        const PRIMARY_CDN = 'https://threejs.org/examples/textures/planets/';
+        const FALLBACK_CDN = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/';
+
+        function loadEarthTexture(file, isSRGB = true) {
+            const tex = textureLoader.load(
+                PRIMARY_CDN + file,
+                undefined,
+                undefined,
+                () => {
+                    textureLoader.load(FALLBACK_CDN + file, (fallbackTex) => {
+                        tex.image = fallbackTex.image;
+                        tex.needsUpdate = true;
+                    });
+                }
+            );
+            if (isSRGB) tex.colorSpace = THREE.SRGBColorSpace;
+            tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            return tex;
+        }
+
+        const dayTex      = loadEarthTexture('earth_atmos_2048.jpg', true);
+        const nightTex    = loadEarthTexture('earth_lights_2048.png', true);
+        const normalTex   = loadEarthTexture('earth_normal_2048.jpg', false);
+        const specularTex = loadEarthTexture('earth_specular_2048.jpg', false);
+        const cloudsTex   = loadEarthTexture('earth_clouds_1024.png', true);
+
+        // ==========================================
+        // 4. КАСТОМНЫЙ ШЕЙДЕР ЗЕМЛИ + ГОЛОГРАФИЧЕСКАЯ СЕТКА ОКЕАНОВ
+        // ==========================================
+        const earthMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uDayTexture:   { value: dayTex },
+                uNightTexture: { value: nightTex },
+                uNormalMap:    { value: normalTex },
+                uSpecularMap:  { value: specularTex },
+                uSunDirection: { value: sunDirection },
+                uTime:         { value: 0 },
+                uHoloGrid:     { value: 1.0 }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                varying vec3 vWorldNormal;
+                varying vec3 vWorldPos;
+                varying vec3 vLocalPos;
+
+                void main() {
+                    vUv = uv;
+                    vLocalPos = position;
+                    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+                    vWorldPos = worldPos.xyz;
+                    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+                    gl_Position = projectionMatrix * viewMatrix * worldPos;
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D uDayTexture;
+                uniform sampler2D uNightTexture;
+                uniform sampler2D uNormalMap;
+                uniform sampler2D uSpecularMap;
+                uniform vec3 uSunDirection;
+                uniform float uTime;
+                uniform float uHoloGrid;
+
+                varying vec2 vUv;
+                varying vec3 vWorldNormal;
+                varying vec3 vWorldPos;
+                varying vec3 vLocalPos;
+
+                void main() {
+                    vec3 normal = normalize(vWorldNormal);
+                    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+                    vec3 sunDir = normalize(uSunDirection);
+
+                    // Рельеф из карты нормалей
+                    vec3 nMap = texture2D(uNormalMap, vUv).xyz * 2.0 - 1.0;
+                    normal = normalize(normal + nMap * 0.25);
+
+                    float ndotl = dot(normal, sunDir);
+                    float dayFactor = smoothstep(-0.16, 0.28, ndotl);
+                    float nightFactor = 1.0 - smoothstep(-0.2, 0.1, ndotl);
+
+                    vec3 dayAlbedo = texture2D(uDayTexture, vUv).rgb;
+                    vec3 nightLights = texture2D(uNightTexture, vUv).rgb;
+                    float oceanMask = texture2D(uSpecularMap, vUv).r;
+
+                    // Сбалансированное дневное освещение (ниже порога Bloom 0.4, чтобы не засвечивать материки)
+                    float diff = max(ndotl, 0.0);
+                    vec3 dayColor = dayAlbedo * (0.06 + diff * 0.42);
+                    // Легкий футуристический холодный оттенок океанов
+                    dayColor = mix(dayColor, dayColor * vec3(0.75, 1.05, 1.28), oceanMask * 0.45);
+
+                    // Солнечный блик на воде (Specular)
+                    vec3 halfVec = normalize(sunDir + viewDir);
+                    float spec = pow(max(dot(normal, halfVec), 0.0), 48.0) * oceanMask * dayFactor;
+                    vec3 specColor = vec3(0.45, 0.82, 1.0) * spec * 0.52;
+
+                    // Ночные огни городов (интенсивность > 0.4 специально для красивого свечения в UnrealBloomPass)
+                    vec3 warmCityLights = pow(nightLights, vec3(1.25)) * vec3(1.45, 0.92, 0.42) * 1.45 * nightFactor;
+                    vec3 darkSideAmbient = dayAlbedo * vec3(0.03, 0.07, 0.14) * (1.0 - dayFactor);
+
+                    // ==========================================
+                    // ПУЛЬСИРУЮЩАЯ ГОЛОГРАФИЧЕСКАЯ СЕТКА ПОВЕРХ ОКЕАНОВ
+                    // ==========================================
+                    float latLines = abs(sin(vUv.y * 3.14159265 * 36.0));
+                    float lonLines = abs(sin(vUv.x * 3.14159265 * 72.0));
+                    float gridLine = max(
+                        smoothstep(0.965, 0.998, latLines),
+                        smoothstep(0.965, 0.998, lonLines)
+                    );
+
+                    // Бегущая от полюса к полюсу сканирующая волна
+                    float scanWave = pow(0.5 + 0.5 * sin(vUv.y * 18.0 - uTime * 2.2), 6.0);
+                    float pulse = 0.55 + 0.45 * sin(uTime * 1.8 + vUv.x * 12.0);
+
+                    float holoMask = oceanMask * uHoloGrid;
+                    vec3 gridColor = vec3(0.0, 0.78, 1.0) * gridLine * (0.14 + 0.36 * scanWave) * pulse * holoMask;
+                    vec3 scanBand = vec3(0.0, 0.55, 0.85) * scanWave * 0.07 * holoMask;
+
+                    // Легкий атмосферный контур на самой поверхности
+                    float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.2);
+                    vec3 surfaceRim = vec3(0.05, 0.48, 0.9) * fresnel * (0.15 + 0.35 * dayFactor);
+
+                    vec3 finalColor = dayColor * dayFactor + darkSideAmbient + warmCityLights + specColor + gridColor + scanBand + surfaceRim;
+                    gl_FragColor = vec4(finalColor, 1.0);
+                }
+            `
+        });
+
+        const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS, 96, 96), earthMaterial);
+        globeGroup.add(earthMesh);
+
+        // ==========================================
+        // 5. ОБЛАКА И АТМОСФЕРА (С УЧЕТОМ ДНЕВНОЙ И НОЧНОЙ СТОРОНЫ)
+        // ==========================================
+        const cloudsMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uCloudsTex:    { value: cloudsTex },
+                uSunDirection: { value: sunDirection }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                varying vec3 vWorldNormal;
+                void main() {
+                    vUv = uv;
+                    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D uCloudsTex;
+                uniform vec3 uSunDirection;
+                varying vec2 vUv;
+                varying vec3 vWorldNormal;
+
+                void main() {
+                    float cloud = texture2D(uCloudsTex, vUv).r;
+                    float sunLight = smoothstep(-0.25, 0.35, dot(normalize(vWorldNormal), normalize(uSunDirection)));
+                    // На дневной стороне облака светлые, на ночной — приглушенно-синие
+                    vec3 cloudCol = mix(vec3(0.04, 0.1, 0.18), vec3(0.36, 0.42, 0.48), sunLight);
+                    gl_FragColor = vec4(cloudCol, cloud * 0.72);
+                }
+            `,
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        const cloudsMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.013, 64, 64), cloudsMaterial);
+        globeGroup.add(cloudsMesh);
+
+        // Внешняя атмосфера с Fresnel-шейдером (ярче днем, тусклее ночью)
+        const atmosphereMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uSunDirection: { value: sunDirection }
+            },
+            vertexShader: `
+                varying vec3 vWorldNormal;
+                varying vec3 vWorldPos;
+                void main() {
+                    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+                    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+                    vWorldPos = worldPos.xyz;
+                    gl_Position = projectionMatrix * viewMatrix * worldPos;
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 uSunDirection;
+                varying vec3 vWorldNormal;
+                varying vec3 vWorldPos;
+
+                void main() {
+                    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+                    vec3 normal = normalize(vWorldNormal);
+                    float sunSide = smoothstep(-0.45, 0.55, dot(normal, normalize(uSunDirection)));
+
+                    // Эффект Френеля на внутренней стороне внешней сферы
+                    float fresnel = pow(0.66 - dot(-normal, viewDir), 3.0);
+                    float dayNightIntensity = mix(0.22, 0.95, sunSide);
+
+                    vec3 atmosColor = mix(vec3(0.02, 0.28, 0.75), vec3(0.12, 0.68, 1.0), sunSide);
+                    gl_FragColor = vec4(atmosColor * fresnel * dayNightIntensity * 0.7, fresnel * dayNightIntensity);
+                }
+            `,
+            side: THREE.BackSide,
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        const atmosphereMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.135, 64, 64), atmosphereMaterial);
+        scene.add(atmosphereMesh);
+
+        // ==========================================
+        // 6. ОСЬ ВРАЩЕНИЯ ЗЕМЛИ (ПУНКТИРНАЯ ЛИНИЯ ЧЕРЕЗ ПОЛЮСА)
+        // ==========================================
+        function createPolarAxis() {
+            const axisPoints = [
+                new THREE.Vector3(0, -EARTH_RADIUS * 1.48, 0),
+                new THREE.Vector3(0,  EARTH_RADIUS * 1.48, 0)
+            ];
+            const axisGeo = new THREE.BufferGeometry().setFromPoints(axisPoints);
+            const axisMat = new THREE.LineDashedMaterial({
+                color: 0x00d8ff,
+                dashSize: 0.45,
+                gapSize: 0.3,
+                transparent: true,
+                opacity: 0.35
+            });
+            const axisLine = new THREE.Line(axisGeo, axisMat);
+            axisLine.computeLineDistances();
+            scene.add(axisLine);
+
+            // Голографические полярные кольца на Северном и Южном полюсах
+            const polarRingGeo = new THREE.RingGeometry(0.45, 0.52, 48);
+            polarRingGeo.rotateX(Math.PI / 2);
+            const polarRingMat = new THREE.MeshBasicMaterial({
+                color: 0x00e5ff,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.45
+            });
+
+            const northRing = new THREE.Mesh(polarRingGeo, polarRingMat);
+            northRing.position.y = EARTH_RADIUS * 1.18;
+            scene.add(northRing);
+
+            const southRing = northRing.clone();
+            southRing.position.y = -EARTH_RADIUS * 1.18;
+            scene.add(southRing);
+        }
+
+        createPolarAxis();
+
+        // ==========================================
+        // 7. ГОРОДА, 3D-ПИНЫ, CSS2D-ПОДПИСИ И ДУГИ СВЯЗИ
+        // ==========================================
+        // Перевод географических координат (широта, долгота) в 3D-вектор на сфере Three.js
+        function latLonToVector3(lat, lon, radius = EARTH_RADIUS) {
+            const polar = THREE.MathUtils.degToRad(90 - lat);
+            const azimuth = THREE.MathUtils.degToRad(lon + 180);
+
+            return new THREE.Vector3(
+                -radius * Math.sin(polar) * Math.cos(azimuth),
+                 radius * Math.cos(polar),
+                 radius * Math.sin(polar) * Math.sin(azimuth)
+            );
+        }
+
+        const CITIES = [
+            { id: 'moscow',  name: 'Москва',   lat: 55.7558, lon: 37.6173,  coordsText: '55.75°N 37.61°E', isHub: true },
+            { id: 'newyork', name: 'Нью-Йорк', lat: 40.7128, lon: -74.0060, coordsText: '40.71°N 74.00°W', isHub: false },
+            { id: 'tokyo',   name: 'Токио',    lat: 35.6762, lon: 139.6503, coordsText: '35.67°N 139.65°E', isHub: false },
+            { id: 'london',  name: 'Лондон',   lat: 51.5074, lon: -0.1278,  coordsText: '51.50°N 00.12°W', isHub: false },
+            { id: 'sydney',  name: 'Сидней',   lat: -33.8688, lon: 151.2093, coordsText: '33.86°S 151.20°E', isHub: false }
+        ];
+
+        const networkGroup = new THREE.Group();
+        globeGroup.add(networkGroup);
+
+        const cityObjects = [];
+        const pulseRings = [];
+        const dataPackets = [];
+
+        // Создание 3D-пина и HTML-подписи для каждого города
+        CITIES.forEach((city) => {
+            const surfacePos = latLonToVector3(city.lat, city.lon, EARTH_RADIUS);
+            const surfaceNormal = surfacePos.clone().normalize();
+
+            const pinGroup = new THREE.Group();
+            pinGroup.position.copy(surfacePos);
+            // Ориентируем локальную ось Y пина вдоль нормали поверхности Земли
+            pinGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), surfaceNormal);
+            globeGroup.add(pinGroup);
+
+            const primaryColor = city.isHub ? new THREE.Color(1.8, 1.15, 0.2) : new THREE.Color(0.1, 1.45, 1.8);
+
+            // 1. Светящееся кольцо у основания
+            const baseRingGeo = new THREE.RingGeometry(0.11, 0.21, 32);
+            baseRingGeo.rotateX(-Math.PI / 2);
+            const baseRingMat = new THREE.MeshBasicMaterial({
+                color: primaryColor,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.9,
+                blending: THREE.AdditiveBlending
+            });
+            const baseRing = new THREE.Mesh(baseRingGeo, baseRingMat);
+            baseRing.position.y = 0.03;
+            pinGroup.add(baseRing);
+
+            // 2. Расходящаяся волна радара вокруг пина
+            const pulseRingGeo = new THREE.RingGeometry(0.18, 0.24, 32);
+            pulseRingGeo.rotateX(-Math.PI / 2);
+            const pulseRingMat = new THREE.MeshBasicMaterial({
+                color: primaryColor,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.75,
+                blending: THREE.AdditiveBlending
+            });
+            const pulseRing = new THREE.Mesh(pulseRingGeo, pulseRingMat);
+            pulseRing.position.y = 0.035;
+            pinGroup.add(pulseRing);
+            pulseRings.push({ mesh: pulseRing, mat: pulseRingMat, phase: Math.random() * Math.PI * 2 });
+
+            // 3. Вертикальный лазерный шпиль пина
+            const stemHeight = city.isHub ? 0.95 : 0.72;
+            const stemGeo = new THREE.CylinderGeometry(0.025, 0.008, stemHeight, 12);
+            stemGeo.translate(0, stemHeight / 2, 0);
+            const stemMat = new THREE.MeshBasicMaterial({
+                color: primaryColor,
+                transparent: true,
+                opacity: 0.85,
+                blending: THREE.AdditiveBlending
+            });
+            const stemMesh = new THREE.Mesh(stemGeo, stemMat);
+            pinGroup.add(stemMesh);
+
+            // 4. Светящаяся сфера на вершине пина
+            const tipGeo = new THREE.SphereGeometry(city.isHub ? 0.095 : 0.075, 16, 16);
+            const tipMat = new THREE.MeshBasicMaterial({ color: primaryColor });
+            const tipMesh = new THREE.Mesh(tipGeo, tipMat);
+            tipMesh.position.y = stemHeight;
+            pinGroup.add(tipMesh);
+
+            // 5. HTML-подпись через CSS2DObject
+            const labelDiv = document.createElement('div');
+            labelDiv.className = `city-label ${city.isHub ? 'hub' : ''}`;
+            labelDiv.innerHTML = `
+                <span class="city-dot"></span>
+                <span>${city.name}</span>
+                <span class="city-coords">${city.coordsText}</span>
+            `;
+
+            const labelObject = new CSS2DObject(labelDiv);
+            labelObject.position.set(0, stemHeight + 0.22, 0);
+            pinGroup.add(labelObject);
+
+            const cityEntry = {
+                ...city,
+                localPos: surfacePos,
+                localNormal: surfaceNormal,
+                pinGroup,
+                labelDiv
+            };
+            cityObjects.push(cityEntry);
+
+            // Плавный подлёт камеры при клике на HTML-подпись города
+            labelDiv.addEventListener('click', (e) => {
+                e.stopPropagation();
+                flyToCity(cityEntry);
+            });
+        });
+
+        // ==========================================
+        // 8. СВЕТЯЩИЕСЯ ДУГИ СВЯЗИ И ПОТОКИ ДАННЫХ (МОСКВА <-> МИР)
+        // ==========================================
+        const moscowCity = cityObjects.find((c) => c.id === 'moscow');
+        const targetCities = cityObjects.filter((c) => c.id !== 'moscow');
+
+        targetCities.forEach((targetCity, routeIdx) => {
+            const p1 = moscowCity.localPos.clone();
+            const p2 = targetCity.localPos.clone();
+
+            // Вычисляем контрольную точку QuadraticBezierCurve3 так, чтобы вершина дуги
+            // гарантированно проходила высоко над поверхностью Земли даже для Сиднея
+            const chordDist = p1.distanceTo(p2);
+            const midPoint = p1.clone().add(p2).multiplyScalar(0.5);
+            const midDir = midPoint.lengthSq() > 0.001
+                ? midPoint.clone().normalize()
+                : new THREE.Vector3().crossVectors(p1, new THREE.Vector3(0, 1, 0)).normalize();
+
+            const desiredApexRadius = EARTH_RADIUS + 1.4 + chordDist * 0.36;
+            const controlRadius = 2.0 * desiredApexRadius - midPoint.length();
+            const controlPoint = midDir.multiplyScalar(controlRadius);
+
+            const curve = new THREE.QuadraticBezierCurve3(p1, controlPoint, p2);
+
+            // Основная светящаяся трубка линии связи
+            const tubeGeo = new THREE.TubeGeometry(curve, 96, 0.026, 8, false);
+            const tubeMat = new THREE.MeshBasicMaterial({
+                color: new THREE.Color(0.05, 0.85, 1.35),
+                transparent: true,
+                opacity: 0.55,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            const tubeMesh = new THREE.Mesh(tubeGeo, tubeMat);
+            networkGroup.add(tubeMesh);
+
+            // Внутренний яркий сердечник линии
+            const corePoints = curve.getPoints(100);
+            const coreGeo = new THREE.BufferGeometry().setFromPoints(corePoints);
+            const coreMat = new THREE.LineBasicMaterial({
+                color: new THREE.Color(0.4, 1.2, 1.6),
+                transparent: true,
+                opacity: 0.65,
+                blending: THREE.AdditiveBlending
+            });
+            const coreLine = new THREE.Line(coreGeo, coreMat);
+            networkGroup.add(coreLine);
+
+            // Создание пакетов данных: 2 пакета летят из Москвы в город и 2 обратно
+            const directions = [1, -1];
+            directions.forEach((dir) => {
+                for (let p = 0; p < 2; p++) {
+                    const packetGroup = new THREE.Group();
+
+                    // Цвет пакета: золотисто-бирюзовый из Москвы, неоново-голубой обратно
+                    const packetColor = dir === 1
+                        ? new THREE.Color(1.9, 1.35, 0.35)
+                        : new THREE.Color(0.2, 1.65, 2.1);
+
+                    // Головная светящаяся сфера + 3 сферы затухающего шлейфа
+                    const trailMeshes = [];
+                    const trailCount = 4;
+                    for (let k = 0; k < trailCount; k++) {
+                        const radius = (0.088 - k * 0.016);
+                        const sphereGeo = new THREE.SphereGeometry(radius, 12, 12);
+                        const sphereMat = new THREE.MeshBasicMaterial({
+                            color: packetColor.clone().multiplyScalar(1.0 - k * 0.2),
+                            transparent: true,
+                            opacity: 1.0 - k * 0.22,
+                            blending: THREE.AdditiveBlending
+                        });
+                        const mesh = new THREE.Mesh(sphereGeo, sphereMat);
+                        packetGroup.add(mesh);
+                        trailMeshes.push(mesh);
+                    }
+
+                    networkGroup.add(packetGroup);
+
+                    dataPackets.push({
+                        curve,
+                        trailMeshes,
+                        direction: dir,
+                        progress: (p * 0.5 + routeIdx * 0.17) % 1.0,
+                        speed: (0.22 + (routeIdx % 3) * 0.035) / (chordDist / EARTH_RADIUS)
+                    });
+                }
+            });
+        });
+
+        // ==========================================
+        // 9. ИНТЕРФЕЙС (UI) И АНИМАЦИЯ ПОДЛЁТА КАМЕРЫ
+        // ==========================================
+        const uiToggleBtn      = document.getElementById('ui-toggle-btn');
+        const terminalPanel    = document.querySelector('.terminal-panel');
+        const toggleClouds     = document.getElementById('toggle-clouds');
+        const toggleAtmosphere = document.getElementById('toggle-atmosphere');
+        const toggleLinks      = document.getElementById('toggle-links');
+        const toggleGrid       = document.getElementById('toggle-grid');
+        const rotSpeedSlider   = document.getElementById('rot-speed-slider');
+        const rotSpeedLabel    = document.getElementById('rot-speed-label');
+        const resetCamBtn      = document.getElementById('reset-cam-btn');
+        const focusStatus      = document.getElementById('focus-status');
+
+        // Переключение видимости панели управления
+        uiToggleBtn.addEventListener('click', () => {
+            const isHidden = terminalPanel.classList.toggle('hidden');
+            uiToggleBtn.textContent = isHidden ? '☰' : '✕';
+        });
+
+        let rotationSpeedMultiplier = 1.0;
+        let targetGridValue = 1.0;
+
+        toggleClouds.addEventListener('change', (e) => {
+            cloudsMesh.visible = e.target.checked;
+        });
+
+        toggleAtmosphere.addEventListener('change', (e) => {
+            atmosphereMesh.visible = e.target.checked;
+        });
+
+        toggleLinks.addEventListener('change', (e) => {
+            networkGroup.visible = e.target.checked;
+        });
+
+        toggleGrid.addEventListener('change', (e) => {
+            targetGridValue = e.target.checked ? 1.0 : 0.0;
+        });
+
+        rotSpeedSlider.addEventListener('input', (e) => {
+            rotationSpeedMultiplier = parseFloat(e.target.value);
+            rotSpeedLabel.textContent = rotationSpeedMultiplier.toFixed(1) + 'x';
+        });
+
+        // Состояние плавного перелёта камеры к выбранному городу
+        let focusedCity = null;
+        let cameraFlight = null;
+
+        function flyToCity(cityEntry) {
+            focusedCity = cityEntry;
+            focusStatus.textContent = `ФОКУС: ${cityEntry.name.toUpperCase()}`;
+
+            // Вычисляем текущую мировую позицию города
+            const worldCityPos = cityEntry.localPos.clone().applyMatrix4(globeGroup.matrixWorld);
+            const worldNormal = worldCityPos.clone().normalize();
+
+            // Позиция камеры над городом с небольшим кинематографичным наклоном
+            const upOffset = new THREE.Vector3(0, 1.5, 0);
+            const targetCamPos = worldNormal.multiplyScalar(EARTH_RADIUS * 1.85).add(upOffset);
+
+            cameraFlight = {
+                startPos: camera.position.clone(),
+                endPos: targetCamPos,
+                startTarget: controls.target.clone(),
+                endTarget: worldCityPos.clone().multiplyScalar(0.35),
+                progress: 0,
+                duration: 1.35
+            };
+        }
+
+        function resetCamera() {
+            focusedCity = null;
+            focusStatus.textContent = 'ФОКУС: ОРБИТА';
+
+            cameraFlight = {
+                startPos: camera.position.clone(),
+                endPos: DEFAULT_CAM_POS.clone(),
+                startTarget: controls.target.clone(),
+                endTarget: new THREE.Vector3(0, 0, 0),
+                progress: 0,
+                duration: 1.25
+            };
+        }
+
+        resetCamBtn.addEventListener('click', resetCamera);
+
+        // Если пользователь вручную вращает сцену мышью, отключаем жесткую привязку перелета
+        renderer.domElement.addEventListener('pointerdown', () => {
+            cameraFlight = null;
+            if (focusedCity) {
+                focusedCity = null;
+                focusStatus.textContent = 'ФОКУС: СВОБОДНЫЙ';
+            }
+        });
+
+        // Функция плавности (Cubic Ease In-Out)
+        function easeInOutCubic(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        // ==========================================
+        // 10. ГЛАВНЫЙ ЦИКЛ АНИМАЦИИ И РЕНДЕРИНГА
+        // ==========================================
+        const clock = new THREE.Clock();
+        const tempWorldPos = new THREE.Vector3();
+        const tempWorldNormal = new THREE.Vector3();
+        const tempCamDir = new THREE.Vector3();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = Math.min(clock.getDelta(), 0.1);
+            const elapsed = clock.getElapsedTime();
+
+            // Обновление времени в шейдерах
+            starMaterial.uniforms.uTime.value = elapsed;
+            earthMaterial.uniforms.uTime.value = elapsed;
+
+            // Плавное включение/выключение голографической сетки
+            earthMaterial.uniforms.uHoloGrid.value = THREE.MathUtils.lerp(
+                earthMaterial.uniforms.uHoloGrid.value,
+                targetGridValue,
+                delta * 6.0
+            );
+
+            // Вращение планеты и опережающее вращение облачного слоя
+            const baseAngularSpeed = 0.085 * rotationSpeedMultiplier;
+            const deltaAngle = baseAngularSpeed * delta;
+            globeGroup.rotation.y += deltaAngle;
+            cloudsMesh.rotation.y += deltaAngle * 0.38; // Облака движутся быстрее Земли
+
+            // Если камера сфокусирована на городе и перелёт завершён, плавно сопровождаем вращение Земли
+            if (focusedCity && !cameraFlight && deltaAngle !== 0) {
+                camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), deltaAngle);
+                controls.target.applyAxisAngle(new THREE.Vector3(0, 1, 0), deltaAngle);
+            }
+
+            // Обработка плавного перелёта камеры (flyToCity / resetCamera)
+            if (cameraFlight) {
+                cameraFlight.progress += delta / cameraFlight.duration;
+
+                // Если летим к городу на вращающейся Земле, обновляем целевую точку с учетом поворота планеты
+                if (focusedCity) {
+                    const currentWorldCity = focusedCity.localPos.clone().applyMatrix4(globeGroup.matrixWorld);
+                    const currentWorldNormal = currentWorldCity.clone().normalize();
+                    cameraFlight.endPos.copy(currentWorldNormal.multiplyScalar(EARTH_RADIUS * 1.85).add(new THREE.Vector3(0, 1.5, 0)));
+                    cameraFlight.endTarget.copy(currentWorldCity.multiplyScalar(0.35));
+                }
+
+                const t = Math.min(1.0, cameraFlight.progress);
+                const k = easeInOutCubic(t);
+
+                camera.position.lerpVectors(cameraFlight.startPos, cameraFlight.endPos, k);
+                controls.target.lerpVectors(cameraFlight.startTarget, cameraFlight.endTarget, k);
+
+                if (t >= 1.0) {
+                    cameraFlight = null;
+                }
+            }
+
+            // Анимация расходящихся радарных колец вокруг пинов городов
+            pulseRings.forEach((ring) => {
+                const wave = ((elapsed * 0.85 + ring.phase) % 1.0);
+                const scale = 1.0 + wave * 2.6;
+                ring.mesh.scale.set(scale, 1, scale);
+                ring.mat.opacity = (1.0 - wave) * 0.75;
+            });
+
+            // Анимация пакетов данных со шлейфом вдоль дуг Безье
+            if (networkGroup.visible) {
+                dataPackets.forEach((pkt) => {
+                    pkt.progress = (pkt.progress + delta * pkt.speed) % 1.0;
+
+                    pkt.trailMeshes.forEach((mesh, idx) => {
+                        let t = pkt.progress - idx * 0.018;
+                        if (t < 0) t += 1.0;
+                        const curveT = pkt.direction === 1 ? t : (1.0 - t);
+                        const pt = pkt.curve.getPointAt(curveT);
+                        mesh.position.copy(pt);
+                    });
+                });
+            }
+
+            // Проверка видимости HTML-подписей городов (затухание на обратной стороне Земли)
+            globeGroup.updateMatrixWorld();
+            cityObjects.forEach((city) => {
+                tempWorldPos.copy(city.localPos).applyMatrix4(globeGroup.matrixWorld);
+                tempWorldNormal.copy(tempWorldPos).normalize();
+                tempCamDir.subVectors(camera.position, tempWorldPos).normalize();
+
+                const facingDot = tempWorldNormal.dot(tempCamDir);
+                if (facingDot < -0.05) {
+                    city.labelDiv.style.opacity = '0.08';
+                    city.labelDiv.style.pointerEvents = 'none';
+                } else {
+                    city.labelDiv.style.opacity = '1';
+                    city.labelDiv.style.pointerEvents = 'auto';
+                }
+            });
+
+            controls.update();
+
+            // Рендеринг сцены через EffectComposer (с UnrealBloomPass) и поверх — CSS2DRenderer
+            composer.render();
+            labelRenderer.render(scene, camera);
+        }
+
+        // Адаптация под изменение размера окна
+        window.addEventListener('resize', () => {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(w, h);
+            composer.setSize(w, h);
+            bloomPass.resolution.set(w, h);
+            labelRenderer.setSize(w, h);
+
+            starMaterial.uniforms.uPixelRatio.value = renderer.getPixelRatio();
+        });
+
+        animate();
+    </script>
+</body>
+</html>
